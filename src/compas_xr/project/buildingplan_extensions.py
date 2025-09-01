@@ -13,20 +13,20 @@ class BuildingPlanExtensions(object):
 
     # TODO: This makes the building plan in a very manual way
     # TODO: but this needs to be resolved in tandem with building plan revisions.
-    def create_buildingplan_from_assembly_sequence(self, assembly, data_type, robot_keys, priority_keys_lists):
+    def create_buildingplan_from_model_sequence(self, model, data_type, robot_keys, priority_keys_lists):
         """
-        Create a compas_timber.planning.BuildingPlan based on the sequence of the assembly parts.
+        Create a compas_timber.planning.BuildingPlan based on the sequence of the model parts.
 
         Parameters
         ----------
-        assembly : :class:`~compas_timber.assembly.TimberAssembly` or :class:`~compas.datastructures.Assembly`
-            The assembly that you want to generate the buiding plan for.
+        model : :class:`~compas_model.models.Model`
+            The model that you want to generate the building plan for.
         data_type : int
             List index of which data type will be loaded on the application side [0: 'Cylinder', 1: 'Box', 2: 'ObjFile']
         robot_keys : list of str
             List of keys that are intended to be built by the robot.
         priority_keys_lists : list of list of str
-            List in assembly order of lists of assembly keys that can be built in parallel.
+            List in model order of lists of model keys that can be built in parallel.
 
         Returns
         -------
@@ -35,7 +35,7 @@ class BuildingPlanExtensions(object):
 
         """
         data_type_list = ["0.Cylinder", "1.Box", "2.ObjFile"]
-        building_plan = SimpleSequenceGenerator(assembly=assembly).result
+        building_plan = SimpleSequenceGenerator(model=model).result
 
         for step in building_plan.steps:
             step.geometry = data_type_list[data_type]
@@ -58,14 +58,14 @@ class BuildingPlanExtensions(object):
 
         return building_plan
 
-    def create_buildingplan_from_with_custom_sequence(self, assembly, sequenced_keys, data_type, robot_keys, priority_keys_lists):
+    def create_buildingplan_from_with_custom_sequence(self, model, sequenced_keys, data_type, robot_keys, priority_keys_lists):
         """
-        Create a compas_timber.planning.BuildingPlan based on the sequence of the assembly parts.
+        Create a compas_timber.planning.BuildingPlan based on the sequence of the model elements.
 
         Parameters
         ----------
-        assembly : compas_timber.assembly.TimberAssembly or compas.datastructures.Assembly
-            The assembly that you want to generate the buiding plan for.
+        model : compas_model.model.Model
+            The model that you want to generate the building plan for.
         sequenced_keys : list of str
             List of keys that are intended to be built in the order provided.
         data_type : int
@@ -73,16 +73,16 @@ class BuildingPlanExtensions(object):
         robot_keys : list of str
             List of keys that are intended to be built by the robot.
         priority_keys_lists : list of list of str
-            List in assembly order of lists of assembly keys that can be built in parallel.
+            List in model order of lists of model keys that can be built in parallel.
 
         Returns
         -------
         building_plan : compas_timber.planning.BuildingPlan
-            The building plan generated from the assembly sequence.
+            The building plan generated from the model sequence.
 
         """
         data_type_list = ["0.Cylinder", "1.Box", "2.ObjFile"]
-        graph_data = assembly.graph.__data__
+        graph_data = model.graph.__data__
         node_data = graph_data["node"]
         building_plan = BuildingPlan()
 

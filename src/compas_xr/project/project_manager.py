@@ -1,11 +1,11 @@
 import os
 
 from compas.geometry import Frame
-from compas_timber.assembly import TimberAssembly
+from compas_timber.model import TimberModel
 from compas_timber.planning import BuildingPlan
 from compas_timber.planning import Step
 
-from compas_xr.project.assembly_extensions import AssemblyExtensions
+from compas_xr.project.model_extensions import ModelExtensions
 from compas_xr.realtime_database import RealtimeDatabase
 from compas_xr.storage import Storage
 
@@ -55,14 +55,14 @@ class ProjectManager(object):
         data = {"project_name": project_name, "storage_folder": storage_folder, "z_to_y_remap": z_to_y_remap}
         self.database.upload_data(data, "ApplicationSettings")
 
-    def create_project_data_from_compas(self, assembly, building_plan, qr_frames_list):
+    def create_project_data_from_model(self, model, building_plan, qr_frames_list):
         """
         Formats data structure from COMPAS Class Objects.
 
         Parameters
         ----------
-        assembly : :class:`compas.datastructures.Assembly` or :class:`compas_timber.assembly.TimberAssembly`
-            The assembly in which data will be extracted from.
+        model : :class:`compas.model.Model`
+            The model in which data will be extracted from.
         building_plan : :class:`compas_timber.planning.BuildingPlan`
             The BuildingPlan in which data will be extracted from.
         qr_frames_list : list of :class:`compas.geometry.Frame`
@@ -73,22 +73,15 @@ class ProjectManager(object):
         None
 
         """
-        qr_assembly = AssemblyExtensions().create_qr_assembly(qr_frames_list)
-        if isinstance(assembly, TimberAssembly):
-            data = {
-                "QRFrames": qr_assembly.__data__,
-                "assembly": assembly.__data__,
-                "beams": {beam.key: beam for beam in assembly.beams},
-                "joints": {joint.key: joint for joint in assembly.joints},
-                "building_plan": building_plan,
-            }
-        else:
-            data = {
-                "QRFrames": qr_assembly.__data__,
-                "assembly": assembly.__data__,
-                "parts": {part.key: part for part in assembly.parts()},
-                "building_plan": building_plan,
-            }
+        qr_model = ModelExtensions().create_qr_model(qr_frames_list)
+        # TODO: Is wrapping the QR frames to a Model necessary? Is the nested structure and metadata anyhow useful?
+        # TODO: Can't we use {"QRFrames": [f.__data__ for f in qr_frames_list]} instead?
+        data = {
+            "QRFrames": qr_model.__data__,
+            "model": model.__data__,
+            "elements": {element.graph_node: element for element in model.elements},
+            "building_plan": building_plan,
+        }
         return data
 
     def upload_data_to_project(self, data, project_name, data_name):
@@ -111,14 +104,14 @@ class ProjectManager(object):
         """
         self.database.upload_data_to_reference_as_child(data, project_name, data_name)
 
-    def upload_project_data_from_compas(self, project_name, assembly, building_plan, qr_frames_list):
+    def upload_project_data_from_model(self, project_name, model, building_plan, qr_frames_list):
         """
         Formats data structure from COMPAS Class Objects and uploads them to the RealtimeDatabase under project name.
 
         Parameters
         ----------
-        assembly : :class:`compas.datastructures.Assembly` or :class:`compas_timber.assembly.TimberAssembly`
-            The assembly in which data will be extracted from.
+        model : :class:`~compas.model.Model` or :class:`~compas_timber.model.TimberModel`
+            The model in which data will be extracted from.
         building_plan : :class:`compas_timber.planning.BuildingPlan`
             The BuildingPlan in which data will be extracted from.
         qr_frames_list : list of :class:`compas.geometry.Frame`
@@ -131,7 +124,7 @@ class ProjectManager(object):
         None
 
         """
-        data = self.create_project_data_from_compas(assembly, building_plan, qr_frames_list)
+        data = self.create_project_data_from_model(model, building_plan, qr_frames_list)
         self.database.upload_data(data, project_name)
 
     def upload_qr_frames_to_project(self, project_name, qr_frames_list):
@@ -150,8 +143,8 @@ class ProjectManager(object):
         None
 
         """
-        qr_assembly = AssemblyExtensions().create_qr_assembly(qr_frames_list)
-        data = qr_assembly.__data__
+        qr_model = ModelExtensions().create_qr_model(qr_frames_list)
+        data = qr_model.__data__
         self.database.upload_data_to_reference_as_child(data, project_name, "QRFrames")
 
     def upload_obj_to_storage(self, path_local, storage_folder_name):
@@ -211,12 +204,12 @@ class ProjectManager(object):
 
     def upload_compas_object_to_storage(self, compas_object, cloud_file_name, pretty=True):
         """
-        Uploads an assembly to the Firebase Storage.
+        Uploads a COMPAS object to the Firebase Storage.
 
         Parameters
         ----------
         compas_object : Any
-            Any compas class instance that is serializable.
+            Any COMPAS class instance that is serializable.
         cloud_file_name : str
             The name of the cloud file. Saved in JSON format, and needs to have a .json extension.
 
@@ -227,9 +220,9 @@ class ProjectManager(object):
         """
         self.storage.upload_data(compas_object, cloud_file_name, pretty=pretty)
 
-    def get_assembly_from_storage(self, cloud_file_name):
+    def get_model_from_storage(self, cloud_file_name):
         """
-        Retrieves an assembly from the Firebase Storage.
+        Retrieves a model from the Firebase Storage.
 
         Parameters
         ----------
@@ -238,8 +231,8 @@ class ProjectManager(object):
 
         Returns
         -------
-        assembly : :class:`compas.datastructures.Assembly` or :class:`compas_timber.assembly.TimberAssembly`
-            The assembly retrieved from the storage.
+        model : :class:`compas.model.Model`
+            The model retrieved from the storage.
 
         """
         return self.storage.get_data(cloud_file_name)
@@ -276,14 +269,14 @@ class ProjectManager(object):
         current_data["priority"] = priority
         self.database.upload_data_to_deep_reference(current_data, database_reference_list)
 
-    def visualize_project_state_timbers(self, timber_assembly, project_name):
+    def visualize_project_state_timbers(self, timber_model, project_name):
         """
         Retrieves and visualizes data from the Firebase RealtimeDatabase under the specified project name.
 
         Parameters
         ----------
-        timber_assembly : :class:`compas_timbers.assembly.TimberAssembly`
-            The assembly in which the project is based off of: Used for part visulization.
+        timber_model : :class:`compas_timber.model.TimberModel`
+            The model in which the project is based off of: Used for part visualization.
         project_name : str
             The name of the project under which the data will be stored.
 
@@ -303,9 +296,9 @@ class ProjectManager(object):
             The parts that have not been built by a robot.
 
         """
-        nodes = timber_assembly.graph.__data__["node"]
-        buiding_plan_data_reference_list = [project_name, "building_plan", "data"]
-        current_state_data = self.database.get_data_from_deep_reference(buiding_plan_data_reference_list)
+        nodes = timber_model.graph.__data__["node"]
+        building_plan_data_reference_list = [project_name, "building_plan", "data"]
+        current_state_data = self.database.get_data_from_deep_reference(building_plan_data_reference_list)
 
         built_human = []
         unbuilt_human = []
@@ -335,15 +328,11 @@ class ProjectManager(object):
                 step_data.pop("device_id")
             step = Step.__from_data__(step["data"])
             step_locations.append(Frame.__from_data__(step.location))
-            assembly_element_id = step.element_ids[0]
-            # TODO: Tried to write like this, but find_by_key returns a NoneType object
-            """
-            part = timber_assembly.find_by_key(assembly_element_id)
-            """
-            part = nodes[assembly_element_id]["part"]
+            model_element_id = step.element_ids[0]  # TODO: Should a step contain more than one element?
+            part = timber_model.element_by_guid(model_element_id)
             if step.actor == "HUMAN":
                 if step.is_built:
-                    built_human.append(part.blank)
+                    built_human.append(part.blank)  # TODO: Why not the part.geometry which includes features too?
                 else:
                     unbuilt_human.append(part.blank)
             else:
@@ -353,14 +342,14 @@ class ProjectManager(object):
                     unbuilt_robot.append(part.blank)
         return last_built_index, step_locations, built_human, unbuilt_human, built_robot, unbuilt_robot
 
-    def visualize_project_state(self, assembly, project_name):
+    def visualize_project_state(self, model, project_name):
         """
         Retrieves and visualizes data from the Firebase RealtimeDatabase under the specified project name.
 
         Parameters
         ----------
-        assembly : :class:`compas.datastructure.Assembly`
-            The assembly in which the project is based off of: Used for part visulization.
+        model : :class:`compas_model.model.Model`
+            The model in which the project is based off of: Used for part visualization.
         project_name : str
             The name of the project under which the data is stored.
 
@@ -380,9 +369,8 @@ class ProjectManager(object):
             The parts that have not been built by a robot.
 
         """
-        buiding_plan_data_reference_list = [project_name, "building_plan", "data"]
-        current_state_data = self.database.get_data_from_deep_reference(buiding_plan_data_reference_list)
-        nodes = assembly.graph.__data__["node"]
+        building_plan_data_reference_list = [project_name, "building_plan", "data"]
+        current_state_data = self.database.get_data_from_deep_reference(building_plan_data_reference_list)
 
         built_human = []
         unbuilt_human = []
@@ -411,8 +399,8 @@ class ProjectManager(object):
                 step_data.pop("device_id")
             step = Step.__from_data__(step["data"])
             step_locations.append(Frame.__from_data__(step.location))
-            assembly_element_id = step.element_ids[0]
-            part = nodes[str(assembly_element_id)]["part"]
+            model_element_id = step.element_ids[0]
+            part = model._guid_element[model_element_id]  # TODO: In compas_model versions < 0.8.0, an element can be fetched with `model._elements[guid]`.
 
             if step.actor == "HUMAN":
                 # TODO: I am not sure if this works in all scenarios of Part
